@@ -1,0 +1,169 @@
+﻿<!DOCTYPE html>
+<html lang="vi">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Leaflet Map with ThingSpeak Data and Geolocation</title>
+    
+    <link rel="stylesheet" href="https://unpkg.com/leaflet/dist/leaflet.css" />
+    <style>
+        #map { height: 80vh; width: 100%; }
+        #directionsBtn {
+            position: absolute;
+            top: 10px;
+            left: 10px;
+            padding: 10px;
+            background-color: white;
+            border: 1px solid black;
+            cursor: pointer;
+            display: none;
+            z-index: 1000;
+        }
+        #startButton {
+            display: block;
+            margin: 20px auto;
+            padding: 10px 20px;
+            background-color: #28a745;
+            color: white;
+            border: none;
+            cursor: pointer;
+            font-size: 16px;
+        }
+    </style>
+</head>
+<body>
+
+    <button id="startButton">Bắt đầu theo dõi</button>
+    <button id="directionsBtn">Vẽ đường đi</button>
+    <div id="map"></div>
+
+    <script src="https://unpkg.com/leaflet/dist/leaflet.js"></script>
+    <script>
+        var channelID = '2640613';  // Thay bằng Channel ID của bạn
+        var readAPIKey = 'RQ3T9CIDUGWU42U8'; // Thay bằng Read API Key của bạn
+        var writeAPIKey = 'XZQLSUUZVRMP15S6'; // Thay bằng Write API Key của bạn
+
+        var map;
+        var marker, destinationMarker, userMarker;
+        var thingSpeakPosition = null;
+        var path = [];
+        var tracking = false;
+        var trackingInterval;
+        var routeLayer;
+        var previousPosition = null;
+
+        // Khởi tạo bản đồ tại một vị trí mặc định
+        function initializeMap(latitude, longitude) {
+            map = L.map('map').setView([latitude, longitude], 13);
+
+            L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+                attribution: '© OpenStreetMap contributors'
+            }).addTo(map);
+        }
+
+        // Hàm lấy dữ liệu từ ThingSpeak
+        function fetchThingSpeakData() {
+            var url = `https://api.thingspeak.com/channels/${channelID}/feeds.json?api_key=${readAPIKey}&results=1`;
+
+            fetch(url)
+                .then(response => response.json())
+                .then(data => {
+                    var feed = data.feeds[0];
+                    var latitude = parseFloat(feed.field1);
+                    var longitude = parseFloat(feed.field2);
+
+                    if (!isNaN(latitude) && !isNaN(longitude)) {
+                        thingSpeakPosition = [latitude, longitude];
+
+                        // Thêm hoặc cập nhật marker đỏ cho vị trí từ ThingSpeak
+                        if (marker) {
+                            marker.setLatLng(thingSpeakPosition)
+                                .bindPopup(`Vị trí từ ThingSpeak: <br>Vĩ độ: ${latitude}, Kinh độ: ${longitude}`)
+                                .openPopup();
+                        } else {
+                            marker = L.marker(thingSpeakPosition, {color: 'red'}).addTo(map)
+                                .bindPopup(`Vị trí từ ThingSpeak: <br>Vĩ độ: ${latitude}, Kinh độ: ${longitude}`)
+                                .openPopup();
+                        }
+
+                        map.setView(thingSpeakPosition, 13);
+                    } else {
+                        console.log('Invalid data:', feed);
+                    }
+                })
+                .catch(error => console.log('Error fetching data: ' + error));
+        }
+
+        // Hàm bật/tắt theo dõi dữ liệu từ ThingSpeak
+        function toggleTracking() {
+            if (tracking) {
+                clearInterval(trackingInterval);
+                tracking = false;
+                document.getElementById('startButton').innerHTML = "Bắt đầu theo dõi";
+                document.getElementById('startButton').style.backgroundColor = "#28a745";
+            } else {
+                tracking = true;
+                document.getElementById('startButton').innerHTML = "Dừng theo dõi";
+                document.getElementById('startButton').style.backgroundColor = "#dc3545";
+                fetchThingSpeakData();
+                trackingInterval = setInterval(fetchThingSpeakData, 15000);
+            }
+        }
+
+        // Bắt sự kiện nhấn nút "Bắt đầu theo dõi"
+        document.getElementById('startButton').addEventListener('click', toggleTracking);
+
+        // Lấy dữ liệu ngay lập tức khi trang được tải
+        fetchThingSpeakData();
+
+        // Khởi tạo vị trí người dùng
+        if (navigator.geolocation) {
+            navigator.geolocation.watchPosition(function (position) {
+                var lat = position.coords.latitude;
+                var lon = position.coords.longitude;
+
+                if (!userMarker) {
+                    initializeMap(lat, lon);
+                    userMarker = L.marker([lat, lon], {color: 'green'}).addTo(map)
+                        .bindPopup("Vị trí của bạn").openPopup();
+                } else {
+                    userMarker.setLatLng([lat, lon]);
+                }
+
+                map.setView([lat, lon], 13);
+            });
+        } else {
+            alert("Trình duyệt của bạn không hỗ trợ Geolocation.");
+        }
+
+        // Tạo đường đi từ vị trí người dùng đến vị trí ThingSpeak
+        function drawRoute(start, end) {
+            var url = `https://router.project-osrm.org/route/v1/driving/${start.lng},${start.lat};${end[1]},${end[0]}?geometries=geojson&overview=full`;
+
+            fetch(url)
+                .then(response => response.json())
+                .then(data => {
+                    if (data.routes.length === 0) {
+                        alert("Không tìm thấy tuyến đường.");
+                        return;
+                    }
+
+                    var route = data.routes[0].geometry.coordinates.map(coord => [coord[1], coord[0]]);
+                    if (routeLayer) {
+                        map.removeLayer(routeLayer);
+                    }
+                    routeLayer = L.polyline(route, { color: 'blue' }).addTo(map);
+                })
+                .catch(err => console.log('Lỗi khi lấy đường đi:', err));
+        }
+
+        // Nút vẽ đường đi đến vị trí từ ThingSpeak
+        document.getElementById('directionsBtn').addEventListener("click", function() {
+            if (thingSpeakPosition && userMarker) {
+                drawRoute(userMarker.getLatLng(), thingSpeakPosition);
+            }
+        });
+    </script>
+
+</body>
+</html>
