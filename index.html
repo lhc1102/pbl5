@@ -1,4 +1,4 @@
-﻿<!DOCTYPE html>
+<!DOCTYPE html>
 <html lang="vi">
 <head>
     <meta charset="UTF-8">
@@ -44,13 +44,10 @@
         var writeAPIKey = 'XZQLSUUZVRMP15S6'; // Thay bằng Write API Key của bạn
 
         var map;
-        var marker, destinationMarker, userMarker;
+        var thingSpeakMarker, userMarker;
         var thingSpeakPosition = null;
-        var path = [];
         var tracking = false;
         var trackingInterval;
-        var routeLayer;
-        var previousPosition = null;
 
         // Khởi tạo bản đồ tại một vị trí mặc định
         function initializeMap(latitude, longitude) {
@@ -76,17 +73,17 @@
                         thingSpeakPosition = [latitude, longitude];
 
                         // Thêm hoặc cập nhật marker đỏ cho vị trí từ ThingSpeak
-                        if (marker) {
-                            marker.setLatLng(thingSpeakPosition)
+                        if (thingSpeakMarker) {
+                            thingSpeakMarker.setLatLng(thingSpeakPosition)
                                 .bindPopup(`Vị trí từ ThingSpeak: <br>Vĩ độ: ${latitude}, Kinh độ: ${longitude}`)
                                 .openPopup();
                         } else {
-                            marker = L.marker(thingSpeakPosition, {color: 'red'}).addTo(map)
+                            thingSpeakMarker = L.marker(thingSpeakPosition, {icon: L.icon({iconUrl: 'https://example.com/red-marker.png', iconSize: [25, 41]})}).addTo(map)
                                 .bindPopup(`Vị trí từ ThingSpeak: <br>Vĩ độ: ${latitude}, Kinh độ: ${longitude}`)
                                 .openPopup();
                         }
 
-                        map.setView(thingSpeakPosition, 13);
+                        // Không gọi setView() để giữ nguyên trạng thái bản đồ
                     } else {
                         console.log('Invalid data:', feed);
                     }
@@ -130,7 +127,7 @@
                     userMarker.setLatLng([lat, lon]);
                 }
 
-                map.setView([lat, lon], 13);
+                // Giữ nguyên trạng thái zoom của bản đồ
             });
         } else {
             alert("Trình duyệt của bạn không hỗ trợ Geolocation.");
